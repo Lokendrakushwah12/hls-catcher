@@ -9,6 +9,7 @@
     "declarativeNetRequest",
     "storage",
     "tabs",
+    "sidePanel",
     "downloads"
   ],
   "host_permissions": [
@@ -19,5 +20,8 @@
   },
   "action": {
     "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   }
 }

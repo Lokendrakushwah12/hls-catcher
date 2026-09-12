@@ -221,22 +221,12 @@
   <div class="header">
     <div class="titleRow">
       <div class="brand"><span class="dot"></span> HLS Catcher</div>
-      <div class="chip blue" id="countChip">0 found</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="bannerBtn" id="dockBtn" type="button" title="Open in side panel">Dock right ⇥</button>
+        <div class="chip blue" id="countChip">0 found</div>
+      </div>
     </div>
     <div class="subtitle">Capturing manifests from the active tab</div>
-  </div>
-
-  <div class="banner">
-    <div class="bannerTitle">
-      <span>Get Premium</span>
-      <span class="chip">Protected streams</span>
-    </div>
-    <div class="bannerText">Use the captured playlist list below to pick a quality and download the stream.</div>
-    <div class="bannerBar"><span></span></div>
-    <div class="bannerActions">
-      <span>Page-context fetch enabled</span>
-      <button class="bannerBtn" type="button">Get Premium</button>
-    </div>
   </div>
 
   <div id="out" class="empty">Nothing yet — reload the page with the popup closed.</div>

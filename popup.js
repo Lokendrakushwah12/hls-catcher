@@ -4,6 +4,10 @@ const out = document.getElementById("out");
 const countChip = document.getElementById("countChip");
 const spoofedHosts = new Set(); // hosts already covered by the DNR referer rule
 
+// A popup can't be repositioned; the side panel is Chrome's right-side dock.
+document.getElementById("dockBtn").onclick = () =>
+  chrome.sidePanel.open({ tabId: tab.id }).then(() => window.close());
+
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
   await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
