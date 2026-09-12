@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "HLS Catcher",
+  "version": "0.1.0",
+  "description": "Detects HLS/DASH manifests a page requests and lists their variant streams.",
+  "permissions": [
+    "scripting",
+    "webRequest",
+    "declarativeNetRequest",
+    "storage",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

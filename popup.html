@@ -1,0 +1,245 @@
+<meta charset="utf-8">
+<title>HLS Catcher</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    width: 420px;
+    margin: 0;
+    padding: 10px;
+    font: 13px/1.45 -apple-system, system-ui, sans-serif;
+    background: #0f0f10;
+    color: #ececee;
+  }
+  .shell {
+    background: #1a1a1d;
+    border: 1px solid #2b2b2f;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+  .header {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid #2b2b2f;
+    background: linear-gradient(180deg, #202024, #19191c);
+  }
+  .titleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #7dd3fc, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  }
+  .subtitle {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #a1a1aa;
+  }
+  .banner {
+    margin: 10px 14px 12px;
+    padding: 12px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #26262c, #202024);
+    border: 1px solid #34343a;
+  }
+  .bannerTitle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 650;
+    margin-bottom: 6px;
+  }
+  .bannerText {
+    color: #b5b5be;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .bannerBar {
+    height: 6px;
+    border-radius: 999px;
+    background: #2f2f35;
+    overflow: hidden;
+  }
+  .bannerBar > span {
+    display: block;
+    width: 52%;
+    height: 100%;
+    background: linear-gradient(90deg, #38bdf8, #2563eb);
+  }
+  .bannerActions {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: #a1a1aa;
+    font-size: 12px;
+  }
+  .bannerBtn {
+    background: #2e2e35;
+    color: #e8e8ea;
+    border: 1px solid #3a3a42;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font: inherit;
+  }
+  .list {
+    padding: 0 10px 10px;
+  }
+  .stream {
+    background: #232328;
+    border: 1px solid #34343a;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .streamTop {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .meta {
+    min-width: 0;
+    flex: 1;
+  }
+  .chipRow {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 11px;
+    border: 1px solid #3d3d46;
+    background: #2a2a31;
+    color: #c9cad1;
+  }
+  .chip.blue { background: rgba(59, 130, 246, 0.14); color: #93c5fd; border-color: rgba(59, 130, 246, 0.28); }
+  .streamTitle {
+    font-weight: 650;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+  .url {
+    font-size: 11px;
+    color: #8f8f98;
+    word-break: break-all;
+    margin-top: 4px;
+  }
+  .thumbRow {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .thumb {
+    width: 120px;
+    min-height: 68px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4b5563, #111827 70%);
+    border: 1px solid #3a3a42;
+    position: relative;
+    overflow: hidden;
+    flex: 0 0 auto;
+  }
+  .thumb::after {
+    content: "HLS";
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+  }
+  .controls {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  select, button {
+    font: inherit;
+    background: #313139;
+    color: #ececee;
+    border: 1px solid #44444d;
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+  select { min-width: 0; flex: 1; }
+  button { cursor: pointer; }
+  button:hover { background: #3b3b45; }
+  button.primary {
+    background: linear-gradient(90deg, #38bdf8, #2563eb);
+    border-color: transparent;
+    color: #06111f;
+    font-weight: 700;
+  }
+  .dur { color: #4ade80; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty {
+    padding: 22px 14px 24px;
+    color: #9ca3af;
+    text-align: center;
+  }
+  .status {
+    min-height: 16px;
+    font-size: 11px;
+    color: #a1a1aa;
+    font-variant-numeric: tabular-nums;
+  }
+  button:disabled { opacity: 0.55; cursor: default; }
+</style>
+<div class="shell">
+  <div class="header">
+    <div class="titleRow">
+      <div class="brand"><span class="dot"></span> HLS Catcher</div>
+      <div class="chip blue" id="countChip">0 found</div>
+    </div>
+    <div class="subtitle">Capturing manifests from the active tab</div>
+  </div>
+
+  <div class="banner">
+    <div class="bannerTitle">
+      <span>Get Premium</span>
+      <span class="chip">Protected streams</span>
+    </div>
+    <div class="bannerText">Use the captured playlist list below to pick a quality and download the stream.</div>
+    <div class="bannerBar"><span></span></div>
+    <div class="bannerActions">
+      <span>Page-context fetch enabled</span>
+      <button class="bannerBtn" type="button">Get Premium</button>
+    </div>
+  </div>
+
+  <div id="out" class="empty">Nothing yet — reload the page with the popup closed.</div>
+</div>
+
+<script type="module" src="popup.js"></script>
