@@ -10,6 +10,7 @@
     "storage",
     "tabs",
     "sidePanel",
+    "offscreen",
     "downloads"
   ],
   "host_permissions": [

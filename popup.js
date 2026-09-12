@@ -1,8 +1,8 @@
-import { parseMaster, parseSegments, parseDuration, formatTime } from "./parse.js";
+import { parseMaster, parseDuration, formatTime } from "./parse.js";
+import { configure, fetchText } from "./net.js";
 
 const out = document.getElementById("out");
 const countChip = document.getElementById("countChip");
-const spoofedHosts = new Set(); // hosts already covered by the DNR referer rule
 
 // A popup can't be repositioned; the side panel is Chrome's right-side dock.
 document.getElementById("dockBtn").onclick = () =>
@@ -11,6 +11,11 @@ document.getElementById("dockBtn").onclick = () =>
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
   await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
+configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
+
+// Downloads run in the offscreen doc; it reports back here (if we're still open).
+const jobs = new Map(); // playlistUrl -> (msg) => void
+chrome.runtime.onMessage.addListener((msg) => jobs.get(msg.playlistUrl)?.(msg));
 
 if (urls.length) {
   out.className = "";
@@ -65,7 +70,7 @@ async function card(url) {
     return el;
   }
 
-  // A media playlist has no variants — it *is* the stream.
+  // A media playlist has no variants - it *is* the stream.
   const picker = document.createElement("select");
   for (const v of variants) {
     picker.append(new Option(`${v.resolution} · ${Math.round(v.bandwidth / 1000)} kbps`, v.url));
@@ -81,51 +86,27 @@ async function card(url) {
   const go = document.createElement("button");
   go.textContent = "Download";
   go.className = "primary";
-  go.onclick = async () => {
+  go.onclick = () => {
+    const playlistUrl = picker.value;
     go.disabled = picker.disabled = true;
-    try {
-      await grab(picker.value, label(picker), (done, total, bytes) => {
-        status.textContent = `${done}/${total} segments · ${(bytes / 1e6).toFixed(1)} MB`;
-      });
-      status.textContent = "saved";
-    } catch (e) {
-      status.textContent = e.message;
-    }
-    go.disabled = picker.disabled = false;
+    status.textContent = "starting…";
+    jobs.set(playlistUrl, (msg) => {
+      if (msg.type === "progress") {
+        status.textContent = `${msg.done}/${msg.total} segments · ${(msg.bytes / 1e6).toFixed(1)} MB`;
+        return;
+      }
+      status.textContent = msg.type === "done" ? "saved" : msg.message;
+      go.disabled = picker.disabled = false;
+      jobs.delete(playlistUrl);
+    });
+    // Handed to the background - keeps running even if this popup/panel closes.
+    chrome.runtime.sendMessage({ type: "download", playlistUrl, name: label(picker), referer: capturedReferer });
   };
 
   row.textContent = "";
   row.append(picker, go, dur);
   status.textContent = variants.length ? `${variants.length} quality option${variants.length === 1 ? "" : "s"}` : "single playlist";
   return el;
-}
-
-// Fetch every segment and concatenate. MPEG-TS and fMP4 are both designed to
-// be concatenatable — fMP4 just needs its #EXT-X-MAP init segment in front.
-async function grab(playlistUrl, name, onProgress) {
-  const { text, resolvedUrl } = await fetchText(playlistUrl);
-  const { segments, initUrl, encrypted } = parseSegments(text, resolvedUrl);
-  if (encrypted) throw new Error("encrypted stream — not supported");
-  if (!segments.length) throw new Error("no segments found");
-
-  const parts = initUrl ? [await fetchSegment({ url: initUrl })] : [];
-  let bytes = 0;
-
-  // ponytail: whole file buffered in memory, ~400 MB at 1080p. Swap for the
-  // File System Access API and stream to disk if you hit the wall.
-  const BATCH = 6;
-  for (let i = 0; i < segments.length; i += BATCH) {
-    const chunk = await Promise.all(segments.slice(i, i + BATCH).map(fetchSegment));
-    for (const b of chunk) bytes += b.byteLength;
-    parts.push(...chunk); // Promise.all preserves order
-    onProgress(Math.min(i + BATCH, segments.length), segments.length, bytes);
-  }
-
-  const blob = new Blob(parts, { type: initUrl ? "video/mp4" : "video/mp2t" });
-  await chrome.downloads.download({
-    url: URL.createObjectURL(blob),
-    filename: `${name}.${initUrl ? "mp4" : "ts"}`,
-  });
 }
 
 function label(picker) {
@@ -182,7 +163,7 @@ async function spoofReferer(url) {
         type: "modifyHeaders",
         requestHeaders: [
           { header: "referer", operation: "set", value: referer },
-          // ponytail: drop this Origin line if a CDN 403s on it — Referer is
+          // ponytail: drop this Origin line if a CDN 403s on it - Referer is
           // the usual hotlink signal, Origin only matters for stricter ones.
           { header: "origin", operation: "set", value: origin },
         ],

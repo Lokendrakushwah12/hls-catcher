@@ -74,6 +74,23 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.session.remove(key(tabId));
 });
 
+// The popup hands downloads to an offscreen document so they keep running after
+// the popup/side panel closes (service workers can't create blob URLs).
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "download") startDownload(msg);
+});
+
+async function startDownload({ playlistUrl, name, referer }) {
+  if (!(await chrome.offscreen.hasDocument())) {
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["BLOBS"],
+      justification: "Assemble and save HLS video segments in the background.",
+    });
+  }
+  chrome.runtime.sendMessage({ type: "offscreen-download", playlistUrl, name, referer });
+}
+
 function concatUint8(chunks) {
   const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
   const out = new Uint8Array(size);
