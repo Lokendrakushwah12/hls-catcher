@@ -75,9 +75,22 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 // The popup hands downloads to an offscreen document so they keep running after
-// the popup/side panel closes (service workers can't create blob URLs).
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "download") startDownload(msg);
+// the popup/side panel closes. The offscreen doc only has chrome.runtime, so
+// the service worker owns the two APIs it lacks: declarativeNetRequest (referer
+// spoofing) and downloads (saving the assembled blob).
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "download") {
+    startDownload(msg);
+    return;
+  }
+  if (msg.type === "spoof") {
+    spoofHost(msg.host, msg.referer).then(() => sendResponse({ ok: true }));
+    return true; // async response
+  }
+  if (msg.type === "save") {
+    saveBlob(msg.blobUrl, msg.filename, sendResponse);
+    return true; // response is deferred until the download completes
+  }
 });
 
 async function startDownload({ playlistUrl, name, referer }) {
@@ -89,6 +102,49 @@ async function startDownload({ playlistUrl, name, referer }) {
     });
   }
   chrome.runtime.sendMessage({ type: "offscreen-download", playlistUrl, name, referer });
+}
+
+// DNR rule 778 covers the offscreen doc's fetches. Merge into the existing rule
+// (read it back) so a service-worker restart mid-download can't drop hosts.
+async function spoofHost(host, referer) {
+  const current = (await chrome.declarativeNetRequest.getSessionRules()).find((r) => r.id === 778);
+  const hosts = new Set(current?.condition.requestDomains || []);
+  hosts.add(host);
+  const ref = referer || `https://${host}/`;
+  const origin = new URL(ref).origin;
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [778],
+    addRules: [{
+      id: 778,
+      priority: 1,
+      condition: { requestDomains: [...hosts], resourceTypes: ["xmlhttprequest"] },
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [
+          { header: "referer", operation: "set", value: ref },
+          { header: "origin", operation: "set", value: origin },
+        ],
+      },
+    }],
+  });
+}
+
+// Save the offscreen's blob URL, and only respond once the download finishes —
+// that keeps the offscreen doc (and its blob) alive until Chrome has the bytes.
+function saveBlob(blobUrl, filename, sendResponse) {
+  chrome.downloads
+    .download({ url: blobUrl, filename })
+    .then((id) => {
+      const onChanged = (delta) => {
+        if (delta.id !== id || !delta.state) return;
+        if (delta.state.current === "complete" || delta.state.current === "interrupted") {
+          chrome.downloads.onChanged.removeListener(onChanged);
+          sendResponse(delta.state.current === "complete" ? { ok: true } : { error: "download interrupted" });
+        }
+      };
+      chrome.downloads.onChanged.addListener(onChanged);
+    })
+    .catch((e) => sendResponse({ error: e.message }));
 }
 
 function concatUint8(chunks) {

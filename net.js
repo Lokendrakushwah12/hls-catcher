@@ -1,14 +1,19 @@
-// Shared by the popup (reading manifests) and the offscreen doc (downloading).
-// Fetch from the extension - host_permissions means no CORS wall - while a DNR
-// rule rewrites Referer/Origin to the player's, to pass CDN hotlink checks.
-// Popup and offscreen run in separate contexts, so each owns a distinct rule id.
+// Shared fetch used by the popup and the offscreen doc. Fetch from the
+// extension (host_permissions = no CORS wall) while a DNR rule rewrites
+// Referer/Origin to the player's, to pass CDN hotlink checks.
+//
+// The popup can set DNR rules itself. The offscreen doc CANNOT — it only has
+// chrome.runtime — so there it runs in "relay" mode: it asks the service
+// worker (which does have declarativeNetRequest) to cover each host instead.
 let pageReferer = null;
 let ruleId = 777;
+let relay = false;
 const spoofedHosts = new Set();
 
-export function configure(referer, id = 777) {
+export function configure(referer, id = 777, opts = {}) {
   pageReferer = referer || null;
   ruleId = id;
+  relay = !!opts.relay;
 }
 
 export async function fetchText(url, options) {
@@ -32,13 +37,19 @@ async function fetchVia(url, responseType, options) {
   return { bytes: new Uint8Array(buf), resolvedUrl: r.url || url };
 }
 
-// The DNR rule's domain list grows to cover every host we touch (master,
-// variant, segment). Referer = the player's; fall back to the target's own
-// origin (its own domain is almost always allowlisted), never the page.
 async function spoofReferer(url) {
   const host = new URL(url).hostname;
   if (spoofedHosts.has(host)) return;
   spoofedHosts.add(host);
+
+  if (relay) {
+    // Offscreen: hand the host to the SW, which owns the rule.
+    await chrome.runtime.sendMessage({ type: "spoof", host, referer: pageReferer });
+    return;
+  }
+
+  // Popup: set the rule directly. Referer = the player's; fall back to the
+  // target's own origin (almost always allow-listed), never the page.
   const referer = pageReferer || new URL(url).origin + "/";
   const origin = new URL(referer).origin;
   await chrome.declarativeNetRequest.updateSessionRules({
@@ -51,7 +62,7 @@ async function spoofReferer(url) {
         type: "modifyHeaders",
         requestHeaders: [
           { header: "referer", operation: "set", value: referer },
-          // ponytail: drop this Origin line if a CDN 403s on it - Referer is
+          // ponytail: drop this Origin line if a CDN 403s on it — Referer is
           // the usual hotlink signal, Origin only matters for stricter ones.
           { header: "origin", operation: "set", value: origin },
         ],

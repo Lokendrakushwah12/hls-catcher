@@ -1,5 +1,6 @@
-// Runs the actual download so it survives the popup/side panel closing. Lives
-// only while a job is active, then closes itself to free the buffered video.
+// Runs the download so it survives the popup/side panel closing. This context
+// only has chrome.runtime, so: fetch + assemble here, but relay DNR host
+// coverage and the final save to the service worker. Closes itself when idle.
 import { parseSegments } from "./parse.js";
 import { configure, fetchText, fetchSegment } from "./net.js";
 
@@ -11,7 +12,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 async function run({ playlistUrl, name, referer }) {
   active++;
-  configure(referer, 778); // 777 is the popup's rule; keep ours separate
+  configure(referer, 778, { relay: true }); // no DNR API here — relay to the SW
   try {
     await grab(playlistUrl, name, (done, total, bytes) =>
       report({ type: "progress", playlistUrl, done, total, bytes }));
@@ -23,13 +24,13 @@ async function run({ playlistUrl, name, referer }) {
   }
 }
 
-// The popup may be closed - a message with no receiver rejects; ignore it.
+// The popup may be closed — a message with no receiver rejects; ignore it.
 const report = (msg) => chrome.runtime.sendMessage(msg).catch(() => {});
 
 async function grab(playlistUrl, name, onProgress) {
   const { text, resolvedUrl } = await fetchText(playlistUrl);
   const { segments, initUrl, encrypted } = parseSegments(text, resolvedUrl);
-  if (encrypted) throw new Error("encrypted stream - not supported");
+  if (encrypted) throw new Error("encrypted stream — not supported");
   if (!segments.length) throw new Error("no segments found");
 
   const parts = initUrl ? [await fetchSegment({ url: initUrl })] : [];
@@ -46,8 +47,14 @@ async function grab(playlistUrl, name, onProgress) {
   }
 
   const blob = new Blob(parts, { type: initUrl ? "video/mp4" : "video/mp2t" });
-  await chrome.downloads.download({
-    url: URL.createObjectURL(blob),
+  const blobUrl = URL.createObjectURL(blob);
+  // chrome.downloads isn't available here. The SW saves it and resolves only
+  // once the download completes, so we keep the blob alive until then.
+  const res = await chrome.runtime.sendMessage({
+    type: "save",
+    blobUrl,
     filename: `${name}.${initUrl ? "mp4" : "ts"}`,
   });
+  URL.revokeObjectURL(blobUrl);
+  if (res?.error) throw new Error(res.error);
 }

@@ -41,7 +41,9 @@ const thumbDataUrl = await chrome.scripting
 
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
 const jobs = new Map(); // playlistUrl -> (msg) => void
-chrome.runtime.onMessage.addListener((msg) => jobs.get(msg.playlistUrl)?.(msg));
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "progress" || msg.type === "done" || msg.type === "error") jobs.get(msg.playlistUrl)?.(msg);
+});
 
 // Heroicons (solid/mini, 20px) inlined - external icon fetches are CSP-blocked.
 const ICON = {
