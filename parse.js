@@ -20,6 +20,22 @@ export function parseMaster(text, baseUrl) {
   return out.sort((a, b) => b.bandwidth - a.bandwidth);
 }
 
+// Master playlist -> audio rendition URIs. HLS declares a demuxed audio track
+// with `#EXT-X-MEDIA:TYPE=AUDIO,...,URI="..."` (YouTube does this); the default
+// one comes first. Renditions with no URI are muxed into the video, so skipped.
+export function parseAudioRenditions(text, baseUrl) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("#EXT-X-MEDIA:") || !/[:,]TYPE=AUDIO(,|$)/.test(line)) continue;
+    const m = line.match(/URI="([^"]*)"/);
+    if (!m) continue;
+    const url = baseUrl ? new URL(m[1], baseUrl).href : m[1];
+    if (/DEFAULT=YES/.test(line)) out.unshift(url);
+    else out.push(url);
+  }
+  return out;
+}
+
 // Media playlist -> total seconds, by summing segment durations.
 export function parseDuration(text) {
   let total = 0;

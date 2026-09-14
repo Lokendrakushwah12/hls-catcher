@@ -1,4 +1,4 @@
-import { parseMaster, parseDuration, formatTime } from "./parse.js";
+import { parseMaster, parseAudioRenditions, parseDuration, formatTime } from "./parse.js";
 import { configure, fetchText } from "./net.js";
 
 const out = document.getElementById("out");
@@ -170,11 +170,13 @@ async function card(url) {
   row.textContent = "reading…";
 
   let variants = [];
+  let masterAudioUrl = null; // demuxed audio rendition declared in this master
   try {
     const { text, resolvedUrl } = manifestBody
       ? { text: manifestBody, resolvedUrl: manifestUrl }
       : await fetchText(manifestUrl);
     variants = parseMaster(text, resolvedUrl);
+    masterAudioUrl = parseAudioRenditions(text, resolvedUrl)[0] || null;
   } catch (error) {
     row.textContent = `could not fetch manifest${error?.message ? ` (${error.message})` : ""}`;
     return el;
@@ -221,7 +223,10 @@ async function card(url) {
   picker.onchange = refresh;
   refresh();
 
+  // Prefer the audio rendition the master itself declares (correct on YouTube);
+  // fall back to a separate audio manifest captured on the tab.
   const pairedAudio = () =>
+    masterAudioUrl ||
     catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist))?.audioPlaylistUrl;
 
   // Muxing an unknown audio codec into mp4/webm can be invalid; MKV holds any
@@ -230,13 +235,14 @@ async function card(url) {
     startDownload({ playlistUrl: picker.value, audioUrl, name: fileName(title.textContent),
       format: audioUrl ? "mkv" : fmt.value, go, picker, status, bar });
 
-  // Split Download button. Primary attaches the paired audio unless this variant
-  // already carries audio itself — so demuxed streams aren't downloaded silent.
+  // Split Download button. Primary attaches the paired audio track whenever the
+  // tab has a separate one (demuxed sites like YouTube) so it isn't silent.
+  // pairedAudio() only returns audio/media-playlist manifests, never a video
+  // master, and we only map audio from it — so attaching is always safe.
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
-  const alreadyHasAudio = () => AUDIO_CODEC.test(codecsByUrl.get(picker.value) || "");
-  go.onclick = () => run(alreadyHasAudio() ? undefined : pairedAudio());
+  go.onclick = () => run(pairedAudio());
 
   const chev = document.createElement("button");
   chev.className = "chev";

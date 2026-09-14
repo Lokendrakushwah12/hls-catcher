@@ -93,12 +93,18 @@ async function process(video, audio, format, onProgress) {
   // Try the requested container; if the codec isn't valid in it, fall back to
   // MKV, which holds anything — so we never hand back an unplayable file.
   let ext = format;
+  ffLog.length = 0;
   let code = await ff.exec(build(format));
   if (code !== 0 && format !== "mkv") {
     ext = "mkv";
     code = await ff.exec(build("mkv"));
   }
-  if (code !== 0) throw new Error("ffmpeg could not remux this stream");
+  if (code !== 0) {
+    // Surface what ffmpeg saw in the inputs so we can tell audio-vs-video.
+    const streams = ffLog.filter((l) => /Input #|Stream #\d:\d/.test(l)).map((l) => l.trim());
+    const err = ffLog.filter((l) => /error|invalid|matches no/i.test(l)).slice(-1)[0] || "remux failed";
+    throw new Error(`${err.trim()} — ${streams.join(" | ")}`.slice(0, 300));
+  }
 
   const data = await ff.readFile(`out.${ext}`);
   onFfmpegProgress = null;
@@ -107,10 +113,15 @@ async function process(video, audio, format, onProgress) {
 
 let ffmpegPromise = null;
 let onFfmpegProgress = null;
+const ffLog = []; // recent ffmpeg log lines, for surfacing the real error
 function loadFfmpeg() {
   return (ffmpegPromise ??= (async () => {
     const ff = new FFmpegWASM.FFmpeg();
     ff.on("progress", ({ progress }) => onFfmpegProgress?.(progress || 0));
+    ff.on("log", ({ message }) => {
+      ffLog.push(message);
+      if (ffLog.length > 300) ffLog.shift();
+    });
     await ff.load({
       coreURL: chrome.runtime.getURL("vendor/ffmpeg-core.js"),
       wasmURL: chrome.runtime.getURL("vendor/ffmpeg-core.wasm"),
