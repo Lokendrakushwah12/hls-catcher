@@ -21,10 +21,11 @@ chrome.runtime.onMessage.addListener((msg) => {
 // Manifests on this tab, for pairing a video track with its demuxed audio.
 const catalog = []; // { manifestUrl, audioOnly, mediaPlaylist, audioPlaylistUrl }
 
-const AUDIO_CODEC = /^(mp4a|opus|ac-3|ec-3|flac|vorbis)/;
+const AUDIO_CODEC = /(mp4a|opus|ac-3|ec-3|flac|vorbis|dts|alac)/; // anywhere in CODECS
 const VIDEO_CODEC = /(avc|hvc|hev|av01|vp0|vp8|vp9|dvh)/;
 const isAudioOnly = (variants) =>
   variants.length > 0 && variants.every((v) => AUDIO_CODEC.test(v.codecs) && !VIDEO_CODEC.test(v.codecs));
+const isVideoOnly = (codecs = "") => VIDEO_CODEC.test(codecs) && !AUDIO_CODEC.test(codecs);
 
 // Formats we can reach with `-c copy` (container change, no re-encode).
 const VIDEO_FORMATS = ["mp4", "mkv"];
@@ -211,14 +212,19 @@ async function card(url) {
   picker.onchange = refresh;
   refresh();
 
-  const start = (audioUrl) =>
+  const codecsByUrl = new Map(variants.map((v) => [v.url, v.codecs]));
+  const pairedAudio = () =>
+    catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist))?.audioPlaylistUrl;
+
+  const run = (audioUrl) =>
     startDownload({ playlistUrl: picker.value, audioUrl, name: fileName(title.textContent), format: fmt.value, go, picker, status, bar });
 
-  // Split Download button: main action + chevron menu.
+  // Split Download button. Primary auto-attaches the paired audio when this
+  // variant is video-only (demuxed sites like YouTube) so it isn't silent.
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
-  go.onclick = () => start();
+  go.onclick = () => run(isVideoOnly(codecsByUrl.get(picker.value)) ? pairedAudio() : undefined);
 
   const chev = document.createElement("button");
   chev.className = "chev";
@@ -229,17 +235,12 @@ async function card(url) {
   menu.className = "menu";
   menu.hidden = true;
 
-  // On demuxed sites (e.g. YouTube) the audio is a separate manifest - offer to
-  // fetch it and mux into one file.
+  // Override: force video-only, in case the auto-mux picks the wrong audio.
   if (variants.length && !audioOnly) {
-    const muxItem = document.createElement("button");
-    muxItem.innerHTML = `${ICON.download}<span>Download with audio</span>`;
-    muxItem.onclick = () => {
-      const audio = catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist));
-      if (!audio) return void (status.textContent = "no separate audio track found");
-      start(audio.audioPlaylistUrl);
-    };
-    menu.append(muxItem);
+    const videoOnlyItem = document.createElement("button");
+    videoOnlyItem.innerHTML = `${ICON.download}<span>Video only (no audio)</span>`;
+    videoOnlyItem.onclick = () => run(undefined);
+    menu.append(videoOnlyItem);
   }
 
   const copyStream = document.createElement("button");
