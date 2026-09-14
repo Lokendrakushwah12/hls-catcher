@@ -216,13 +216,79 @@
     font-variant-numeric: tabular-nums;
   }
   button:disabled { opacity: 0.55; cursor: default; }
+
+  /* --- icons --- */
+  .ico { width: 16px; height: 16px; flex: 0 0 auto; }
+
+  /* --- flat (non-gradient) solid button --- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #2563eb; color: #fff; border: 1px solid #2563eb;
+    border-radius: 999px; padding: 7px 14px; font: inherit; font-weight: 650;
+    cursor: pointer;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+
+  /* --- split button: Download + chevron --- */
+  .split { position: relative; display: inline-flex; }
+  .split .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .chev {
+    display: inline-flex; align-items: center; padding: 7px 8px;
+    background: #2563eb; color: #fff; border: 1px solid #2563eb;
+    border-left-color: rgba(255, 255, 255, 0.28);
+    border-radius: 0 999px 999px 0; cursor: pointer;
+  }
+  .chev:hover { background: #1d4ed8; }
+  .menu {
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 5;
+    min-width: 176px; padding: 4px;
+    background: #1f1f24; border: 1px solid #3a3a42; border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  .menu button {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 8px 10px; border: 0; border-radius: 7px;
+    background: transparent; color: #ececee; text-align: left; font: inherit;
+    cursor: pointer;
+  }
+  .menu button:hover { background: #2e2e35; }
+
+  /* --- outline icon button (Copy URL) --- */
+  .iconBtn {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+    padding: 5px 10px; font: inherit;
+    background: transparent; color: #c9cad1;
+    border: 1px solid #3d3d46; border-radius: 999px; cursor: pointer;
+  }
+  .iconBtn:hover { background: #26262c; color: #ececee; }
+
+  /* --- duration chip --- */
+  .chip.dur { color: #4ade80; border-color: rgba(74, 222, 128, 0.28); background: rgba(74, 222, 128, 0.12); }
+  .chip.dur .ico { width: 13px; height: 13px; }
+
+  /* --- thumbnail --- */
+  .thumb::after { display: none; }
+  .thumb .play { position: absolute; inset: 0; margin: auto; width: 36px; height: 36px; color: rgba(255, 255, 255, 0.72); }
+  .thumbBadge {
+    position: absolute; left: 8px; bottom: 8px;
+    font-size: 11px; font-weight: 700; padding: 2px 6px;
+    border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #fff;
+  }
+
+  /* --- download progress --- */
+  .progress { height: 6px; margin-top: 6px; border-radius: 999px; background: #2f2f35; overflow: hidden; }
+  .progress > span { display: block; height: 100%; width: 0; background: #2563eb; transition: width 0.2s; }
 </style>
 <div class="shell">
   <div class="header">
     <div class="titleRow">
       <div class="brand"><span class="dot"></span> HLS Catcher</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <button class="bannerBtn" id="dockBtn" type="button" title="Open in side panel">Dock right ⇥</button>
+        <button class="iconBtn" id="dockBtn" type="button" title="Open in side panel" style="margin-top:0">
+          <svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 3A2.25 2.25 0 0 0 2 5.25v9.5A2.25 2.25 0 0 0 4.25 17h11.5A2.25 2.25 0 0 0 18 14.75v-9.5A2.25 2.25 0 0 0 15.75 3H4.25ZM12 4.5v11h3.75a.75.75 0 0 0 .75-.75v-9.5a.75.75 0 0 0-.75-.75H12Z" clip-rule="evenodd"/></svg>
+          Dock right
+        </button>
         <div class="chip blue" id="countChip">0 found</div>
       </div>
     </div>
