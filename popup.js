@@ -50,7 +50,11 @@ const ICON = {
   clock: `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>`,
   chevron: `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 0 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 10 3Zm-3.76 9.2a.75.75 0 0 1 1.06.04l2.7 2.908 2.7-2.908a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 0 1 .04-1.06Z" clip-rule="evenodd"/></svg>`,
   play: `<svg class="play" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM9.555 7.168A1 1 0 0 0 8 8v4a1 1 0 0 0 1.555.832l3-2a1 1 0 0 0 0-1.664l-3-2Z" clip-rule="evenodd"/></svg>`,
+  pencil: `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793ZM11.379 5.793 3 14.172V17h2.828l8.38-8.379-2.83-2.828Z"/></svg>`,
 };
+
+// Strip characters that are illegal in filenames; keep spaces and unicode.
+const fileName = (text) => text.replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 120) || "stream";
 
 // Briefly show "Copied" feedback on a button that has a trailing text span.
 async function copyToClipboard(url, labelEl) {
@@ -84,7 +88,10 @@ async function card(url) {
           <span class="chip">Manifest</span>
           <span class="chip dur" hidden>${ICON.clock}<span class="durText"></span></span>
         </div>
-        <div class="streamTitle"></div>
+        <div class="titleEdit">
+          <div class="streamTitle" contenteditable="true" spellcheck="false"></div>
+          <button class="editBtn" type="button" title="Edit download name">${ICON.pencil}</button>
+        </div>
         <button class="iconBtn copyBtn" type="button" title="Copy manifest URL">${ICON.copy}<span>Copy URL</span></button>
       </div>
     </div>
@@ -104,7 +111,14 @@ async function card(url) {
   const manifestBody = typeof url === "string" ? null : url.body;
 
   title.textContent = tab.title || streamName(manifestUrl);
-  title.title = streamName(manifestUrl); // filename on hover
+  // Enter commits (no newline); the pencil focuses and selects the text.
+  title.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); title.blur(); }
+  };
+  el.querySelector(".editBtn").onclick = () => {
+    title.focus();
+    getSelection().selectAllChildren(title);
+  };
   if (thumbDataUrl) el.querySelector(".thumb").style.backgroundImage = `url("${thumbDataUrl}")`;
   el.querySelector(".copyBtn").onclick = (e) =>
     copyToClipboard(manifestUrl, e.currentTarget.querySelector("span"));
@@ -142,7 +156,7 @@ async function card(url) {
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
-  go.onclick = () => startDownload(picker, go, status, bar);
+  go.onclick = () => startDownload(picker, go, status, bar, fileName(title.textContent));
 
   const chev = document.createElement("button");
   chev.className = "chev";
@@ -169,7 +183,7 @@ async function card(url) {
   split.append(go, chev, menu);
 
   row.textContent = "";
-  // Single-stream playlists have one option — no picker worth showing.
+  // Single-stream playlists have one option - no picker worth showing.
   row.append(...(variants.length ? [picker, split] : [split]));
   status.textContent = variants.length
     ? `${variants.length} quality option${variants.length === 1 ? "" : "s"}`
@@ -178,7 +192,7 @@ async function card(url) {
 }
 
 // Hand the selected quality to the background; reflect progress here.
-function startDownload(picker, go, status, bar) {
+function startDownload(picker, go, status, bar, name) {
   const playlistUrl = picker.value;
   const fill = bar.firstElementChild;
   go.disabled = picker.disabled = true;
@@ -203,13 +217,7 @@ function startDownload(picker, go, status, bar) {
     jobs.delete(playlistUrl);
   });
   // Handed to the background - keeps running even if this popup/panel closes.
-  chrome.runtime.sendMessage({ type: "download", playlistUrl, name: label(picker), referer: capturedReferer });
-}
-
-function label(picker) {
-  const base = (tab.title || "stream").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "stream";
-  const res = picker.selectedOptions[0].textContent.split(" · ")[0];
-  return `${base} ${res}`.replace(/\s+/g, "-");
+  chrome.runtime.sendMessage({ type: "download", playlistUrl, name, referer: capturedReferer });
 }
 
 async function duration(url) {

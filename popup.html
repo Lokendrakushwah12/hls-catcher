@@ -4,8 +4,12 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
-    width: 420px;
-    margin: 0;
+    /* auto width so the toolbar popup sizes to content (min 400) while the
+       side panel - same page - fills its width, capped and centered. */
+    width: auto;
+    min-width: 400px;
+    max-width: 820px;
+    margin: 0 auto;
     padding: 10px;
     font: 13px/1.45 -apple-system, system-ui, sans-serif;
     background: #0f0f10;
@@ -218,13 +222,13 @@
   button:disabled { opacity: 0.55; cursor: default; }
 
   /* --- icons --- */
-  .ico { width: 16px; height: 16px; flex: 0 0 auto; }
+  .ico { width: 15px; height: 15px; flex: 0 0 auto; }
 
-  /* --- flat (non-gradient) solid button --- */
+  /* --- flat (non-gradient) solid button (sm) --- */
   .btn {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 5px;
     background: #2563eb; color: #fff; border: 1px solid #2563eb;
-    border-radius: 999px; padding: 7px 14px; font: inherit; font-weight: 650;
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; font-weight: 650;
     cursor: pointer;
   }
   .btn:hover { background: #1d4ed8; }
@@ -234,7 +238,7 @@
   .split { position: relative; display: inline-flex; }
   .split .btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
   .chev {
-    display: inline-flex; align-items: center; padding: 7px 8px;
+    display: inline-flex; align-items: center; padding: 5px 7px;
     background: #2563eb; color: #fff; border: 1px solid #2563eb;
     border-left-color: rgba(255, 255, 255, 0.28);
     border-radius: 0 999px 999px 0; cursor: pointer;
@@ -254,10 +258,25 @@
   }
   .menu button:hover { background: #2e2e35; }
 
+  /* --- editable title --- */
+  .titleEdit { display: flex; align-items: flex-start; gap: 4px; }
+  .titleEdit .streamTitle {
+    flex: 1; min-width: 0; outline: none;
+    padding: 1px 5px; margin: -1px -5px; border-radius: 6px;
+  }
+  .titleEdit .streamTitle:hover { background: #26262c; }
+  .titleEdit .streamTitle:focus { background: #26262c; box-shadow: inset 0 0 0 1px #2563eb; }
+  .editBtn {
+    flex: 0 0 auto; display: inline-flex; padding: 3px;
+    background: transparent; border: 0; color: #8f8f98; border-radius: 6px; cursor: pointer;
+  }
+  .editBtn:hover { background: #26262c; color: #ececee; }
+  .editBtn .ico { width: 15px; height: 15px; }
+
   /* --- outline icon button (Copy URL) --- */
   .iconBtn {
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
-    padding: 5px 10px; font: inherit;
+    display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+    padding: 4px 9px; font: inherit; font-size: 12px;
     background: transparent; color: #c9cad1;
     border: 1px solid #3d3d46; border-radius: 999px; cursor: pointer;
   }
@@ -280,8 +299,8 @@
   /* --- quality selector --- */
   .row select {
     appearance: none; -webkit-appearance: none;
-    flex: 1; min-width: 0; height: 38px;
-    padding: 0 34px 0 14px; font: inherit; font-weight: 600;
+    flex: 1; min-width: 0; height: 32px;
+    padding: 0 30px 0 12px; font: inherit; font-size: 12.5px; font-weight: 600;
     color: #ececee; background-color: #26262c;
     border: 1px solid #3a3a42; border-radius: 999px; cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23a1a1aa'%3E%3Cpath fill-rule='evenodd' d='M10 3a.75.75 0 0 1 .55.24l3.25 3.5a.75.75 0 1 1-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 0 1-1.1-1.02l3.25-3.5A.75.75 0 0 1 10 3Zm-3.76 9.2a.75.75 0 0 1 1.06.04l2.7 2.908 2.7-2.908a.75.75 0 1 1 1.1 1.02l-3.25 3.5a.75.75 0 0 1-1.1 0l-3.25-3.5a.75.75 0 0 1 .04-1.06Z' clip-rule='evenodd'/%3E%3C/svg%3E");
@@ -289,8 +308,8 @@
   }
   .row select:hover { border-color: #52525b; }
   .row select:focus { outline: none; border-color: #2563eb; }
-  .row .btn { height: 38px; }
-  .row .chev { height: 38px; }
+  .row .btn { height: 32px; }
+  .row .chev { height: 32px; }
 
   /* --- download progress --- */
   .progress { height: 6px; margin-top: 6px; border-radius: 999px; background: #2f2f35; overflow: hidden; }
