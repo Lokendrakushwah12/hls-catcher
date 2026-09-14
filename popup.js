@@ -28,8 +28,13 @@ const isAudioOnly = (variants) =>
 const isVideoOnly = (codecs = "") => VIDEO_CODEC.test(codecs) && !AUDIO_CODEC.test(codecs);
 
 // Formats we can reach with `-c copy` (container change, no re-encode).
-const VIDEO_FORMATS = ["mp4", "mkv"];
-const AUDIO_FORMATS = ["m4a", "mkv"];
+const VIDEO_FORMATS = ["mp4", "webm", "mkv"];
+const AUDIO_FORMATS = ["m4a", "webm", "mkv"];
+
+// Pick a container the codec is actually valid in — VP9/Opus in .mp4 won't play
+// (QuickTime rejects it). H.264/HEVC/AV1 -> mp4; VP8/VP9 -> webm; else mkv.
+const containerFor = (codecs = "") =>
+  /avc|h264|hvc|hev|av01/.test(codecs) ? "mp4" : /vp0|vp8|vp9/.test(codecs) ? "webm" : "mkv";
 
 // Heroicons (solid/mini, 20px) inlined - external icon fetches are CSP-blocked.
 const ICON = {
@@ -196,9 +201,14 @@ async function card(url) {
   fmt.className = "fmt";
   fmt.title = "Output format";
   for (const f of audioOnly ? AUDIO_FORMATS : VIDEO_FORMATS) fmt.append(new Option(f.toUpperCase(), f));
+  let fmtTouched = false;
+  fmt.onchange = () => (fmtTouched = true);
 
   const bwByUrl = new Map(variants.map((v) => [v.url, v.bandwidth]));
+  const codecsByUrl = new Map(variants.map((v) => [v.url, v.codecs]));
   const refresh = async () => {
+    // Default the container to one the selected codec is valid in.
+    if (!audioOnly && !fmtTouched) fmt.value = containerFor(codecsByUrl.get(picker.value));
     const secs = await duration(picker.value);
     durText.textContent = secs ? formatTime(secs) : "live";
     durChip.hidden = secs == null;
@@ -212,7 +222,6 @@ async function card(url) {
   picker.onchange = refresh;
   refresh();
 
-  const codecsByUrl = new Map(variants.map((v) => [v.url, v.codecs]));
   const pairedAudio = () =>
     catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist))?.audioPlaylistUrl;
 

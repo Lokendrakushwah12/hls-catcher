@@ -43,7 +43,7 @@ async function run({ playlistUrl, audioUrl, name, format, referer }) {
 // The popup may be closed - a message with no receiver rejects; ignore it.
 const report = (msg) => chrome.runtime.sendMessage(msg).catch(() => {});
 
-const MIME = { mp4: "video/mp4", mkv: "video/x-matroska", m4a: "audio/mp4" };
+const MIME = { mp4: "video/mp4", webm: "video/webm", mkv: "video/x-matroska", m4a: "audio/mp4" };
 
 // Fetch every segment and concatenate into one buffer. Container is "mp4" for
 // fMP4 (has an #EXT-X-MAP init segment) else "ts" - ffmpeg reads both.
@@ -78,14 +78,15 @@ async function process(video, audio, format, onProgress) {
   onFfmpegProgress = onProgress;
   const inV = `v.${video.container}`;
   const out = `out.${format}`;
+  const fast = format === "mp4" ? ["-movflags", "+faststart"] : [];
   await ff.writeFile(inV, video.data);
   let args;
   if (audio) {
     const inA = `a.${audio.container}`;
     await ff.writeFile(inA, audio.data);
-    args = ["-i", inV, "-i", inA, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", out];
+    args = ["-i", inV, "-i", inA, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...fast, out];
   } else {
-    args = ["-i", inV, "-c", "copy", out];
+    args = ["-i", inV, "-c", "copy", ...fast, out];
   }
   const code = await ff.exec(args);
   if (code !== 0) throw new Error("ffmpeg could not produce this format (codec/container mismatch?)");
