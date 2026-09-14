@@ -2,7 +2,7 @@
 
 A Chrome (MV3) extension that detects the **HLS/DASH manifests** a page requests
 while a video plays, lists their quality variants, and downloads a chosen one as
-a single file — without any external service.
+a single file - without any external service.
 
 It's a small, dependency-free study of the two problems every "download this
 stream" tool has to solve: **finding** the manifest, and **re-fetching** it past
@@ -16,7 +16,7 @@ the CDN protections that assume only the page's own player will ask.
 3. On download, fetches every segment of the chosen variant, concatenates them,
    and saves one `.ts` (MPEG-TS) or `.mp4` (fMP4) file.
 
-## How it works — the engineering
+## How it works - the engineering
 
 ### 1. Detection (`background.js`)
 
@@ -25,8 +25,8 @@ A `chrome.webRequest.onBeforeRequest` listener matches manifest URLs
 *blocking* form of `webRequest`, but a plain observer still sees each request, so
 this needs no content script injected into the page.
 
-Detected URLs are keyed by tab and kept in `chrome.storage.session` — **not** a
-module variable — because MV3 service workers are killed after ~30s idle and a
+Detected URLs are keyed by tab and kept in `chrome.storage.session` - **not** a
+module variable - because MV3 service workers are killed after ~30s idle and a
 `Map` would vanish with them. The list is cleared when the tab navigates or
 closes.
 
@@ -35,7 +35,7 @@ closes.
 > throws and we fall back to re-fetching. The code keeps it as a fast path where
 > available.
 
-### 2. The re-fetch problem — and how download helpers beat it
+### 2. The re-fetch problem - and how download helpers beat it
 
 Re-fetching a captured manifest URL usually **404s**, even though the same URL
 just worked for the player. Two independent reasons, and both had to be handled:
@@ -46,7 +46,7 @@ just worked for the player. Two independent reasons, and both had to be handled:
   then blocked by the page's **CORS** policy (the manifest is usually on a
   different origin than the page).
 
-The escape from that bind — the trick download helpers use — is to fetch from the
+The escape from that bind - the trick download helpers use - is to fetch from the
 **extension** (host permissions mean no CORS wall) while using
 `declarativeNetRequest` to **rewrite the `Referer`/`Origin`** so the CDN sees the
 player, not the extension. See `net.js`.
@@ -58,13 +58,13 @@ origin, which is almost always allow-listed.
 
 A DNR "session rule" (id 777 for the popup, 778 for the offscreen doc so they
 never clobber each other) sets those headers for a growing list of request
-domains — the master host, the variant host, and the segment host, added as each
+domains - the master host, the variant host, and the segment host, added as each
 is discovered.
 
 ### 3. Downloading in the background (`offscreen.js`)
 
 A download of a long video can take minutes, and a popup is destroyed the moment
-it loses focus. So the actual work runs in an **offscreen document** — the one
+it loses focus. So the actual work runs in an **offscreen document** - the one
 MV3 context that both has DOM APIs (`Blob` + `URL.createObjectURL`, which service
 workers lack) and outlives the popup.
 
@@ -78,7 +78,7 @@ offscreen            --("progress" / "done" / "error")-->  popup (if still open)
 
 The offscreen doc fetches segments in batches of 6, concatenates them into a
 `Blob`, hands it to `chrome.downloads`, then **closes itself** when its last job
-finishes to free the buffered video (which can be hundreds of MB — the whole file
+finishes to free the buffered video (which can be hundreds of MB - the whole file
 is held in memory; see the `ponytail:` note in the code for the streaming
 upgrade path). Because the download lives in the offscreen doc, you can switch
 tabs or close the side panel and it keeps going.
@@ -91,7 +91,7 @@ Plain-text HLS parsing, no library:
 - **Media playlist → segments**, handling the three wrinkles real playlists have
   (`parseSegments`): `#EXT-X-BYTERANGE` (segments are ranges of one file),
   `#EXT-X-MAP` (an fMP4 init segment that must lead the output), and
-  `#EXT-X-KEY` (encrypted — refused rather than producing garbage).
+  `#EXT-X-KEY` (encrypted - refused rather than producing garbage).
 - **Duration** by summing `#EXTINF` values (`parseDuration`).
 
 Run the parser's self-check with `node test-parse.js`.
@@ -99,15 +99,15 @@ Run the parser's self-check with `node test-parse.js`.
 ### 5. UI (`popup.html` / `popup.js`)
 
 The same page serves as both the toolbar **popup** and, via the "Dock right"
-button, Chrome's **side panel** (`chrome.sidePanel`) — a popup can't be
+button, Chrome's **side panel** (`chrome.sidePanel`) - a popup can't be
 repositioned, so the side panel is the right-side dock. Each captured manifest
 becomes a card with a quality picker, a split Download button with a live
 progress bar (`% · MB · segments`), and copy-URL actions. Icons are inlined
-Heroicons — the CSP blocks external icon/style fetches.
+Heroicons - the CSP blocks external icon/style fetches.
 
 ## Limits
 
-- **DASH (`.mpd`)** is detected and listed but not downloadable — the parser is
+- **DASH (`.mpd`)** is detected and listed but not downloadable - the parser is
   HLS-only.
 - **Encrypted (DRM) streams** are refused by design.
 - **Audio-only** works when delivered as HLS; direct `.mp3`/`.m4a` files aren't

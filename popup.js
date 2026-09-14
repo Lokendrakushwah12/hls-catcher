@@ -13,11 +13,17 @@ const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
   await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
 configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
 
+// A real frame of the playing tab, as the card thumbnail - no video decoding
+// needed. All cards share it (they're all from this one page/video).
+const thumbDataUrl = await chrome.tabs
+  .captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 })
+  .catch(() => null);
+
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
 const jobs = new Map(); // playlistUrl -> (msg) => void
 chrome.runtime.onMessage.addListener((msg) => jobs.get(msg.playlistUrl)?.(msg));
 
-// Heroicons (solid/mini, 20px) inlined — external icon fetches are CSP-blocked.
+// Heroicons (solid/mini, 20px) inlined - external icon fetches are CSP-blocked.
 const ICON = {
   download: `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 1 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>`,
   copy: `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.12A1.5 1.5 0 0 1 17 6.622V12.5A1.5 1.5 0 0 1 15.5 14h-.5v-3.379a3 3 0 0 0-.879-2.121L10.5 5.379A3 3 0 0 0 8.379 4.5H7v-1Z"/><path d="M4.5 6A1.5 1.5 0 0 0 3 7.5v9A1.5 1.5 0 0 0 4.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L9.44 6.439A1.5 1.5 0 0 0 8.378 6H4.5Z"/></svg>`,
@@ -77,7 +83,9 @@ async function card(url) {
   const manifestUrl = typeof url === "string" ? url : url.url;
   const manifestBody = typeof url === "string" ? null : url.body;
 
-  title.textContent = streamName(manifestUrl);
+  title.textContent = tab.title || streamName(manifestUrl);
+  title.title = streamName(manifestUrl); // filename on hover
+  if (thumbDataUrl) el.querySelector(".thumb").style.backgroundImage = `url("${thumbDataUrl}")`;
   el.querySelector(".copyBtn").onclick = (e) =>
     copyToClipboard(manifestUrl, e.currentTarget.querySelector("span"));
   row.textContent = "reading…";
