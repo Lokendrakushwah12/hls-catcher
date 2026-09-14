@@ -82,7 +82,7 @@ async function copyToClipboard(url, labelEl) {
 document.addEventListener("click", () => document.querySelectorAll(".menu").forEach((m) => (m.hidden = true)));
 
 if (urls.length) {
-  out.className = "";
+  out.className = "list";
   out.textContent = "";
   countChip.textContent = `${urls.length} found`;
   for (const url of urls) out.append(await card(url));
