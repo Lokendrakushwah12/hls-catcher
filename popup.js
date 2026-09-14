@@ -125,61 +125,6 @@ async function duration(url) {
   }
 }
 
-async function fetchText(url, options) {
-  return fetchViaPage(url, "text", options);
-}
-
-// Fetch from the extension (host_permissions = no CORS wall) but use DNR to set
-// Referer/Origin to the page, so these CDNs' hotlink check sees the video
-// player, not chrome-extension://. This is how download helpers get past 404s.
-async function fetchViaPage(url, responseType, options) {
-  await spoofReferer(url);
-  const response = await fetch(url, { credentials: "include", cache: "no-store", ...options });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  if (responseType === "text") {
-    return { text: await response.text(), resolvedUrl: response.url || url };
-  }
-  const buffer = await response.arrayBuffer();
-  return { bytes: Array.from(new Uint8Array(buffer)), resolvedUrl: response.url || url };
-}
-
-// One session DNR rule whose domain list grows to cover every host we touch
-// (master host, variant host, segment host). Referer/Origin = the page.
-async function spoofReferer(url) {
-  const host = new URL(url).hostname;
-  if (spoofedHosts.has(host)) return;
-  spoofedHosts.add(host);
-  // The Referer the player actually sent; fall back to the target's own origin
-  // (its own domain is almost always in the hotlink allowlist), never the page.
-  const referer = capturedReferer || new URL(url).origin + "/";
-  const origin = new URL(referer).origin;
-  await chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: [777],
-    addRules: [{
-      id: 777,
-      priority: 1,
-      condition: { requestDomains: [...spoofedHosts], resourceTypes: ["xmlhttprequest"] },
-      action: {
-        type: "modifyHeaders",
-        requestHeaders: [
-          { header: "referer", operation: "set", value: referer },
-          // ponytail: drop this Origin line if a CDN 403s on it - Referer is
-          // the usual hotlink signal, Origin only matters for stricter ones.
-          { header: "origin", operation: "set", value: origin },
-        ],
-      },
-    }],
-  });
-}
-
-async function fetchSegment({ url, range }) {
-  const opts = range
-    ? { headers: { Range: `bytes=${range.offset}-${range.offset + range.length - 1}` } }
-    : undefined;
-  const { bytes } = await fetchViaPage(url, "bytes", opts);
-  return new Uint8Array(bytes).buffer;
-}
-
 function streamName(url) {
   try {
     const parsed = new URL(url);
