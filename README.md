@@ -4,6 +4,11 @@ A Chrome (MV3) extension that detects the **HLS/DASH manifests** a page requests
 while a video plays, lists their quality variants, and downloads a chosen one as
 a single file - without any external service.
 
+HLS (**HTTP Live Streaming**, Apple) and DASH (**Dynamic Adaptive Streaming over
+HTTP**, aka MPEG-DASH) are the two dominant adaptive-streaming formats: a small
+text *manifest* (`.m3u8` for HLS, `.mpd` for DASH) lists the available quality
+"variants" and the media *segments* each is split into.
+
 It's a small, dependency-free study of the two problems every "download this
 stream" tool has to solve: **finding** the manifest, and **re-fetching** it past
 the CDN protections that assume only the page's own player will ask.

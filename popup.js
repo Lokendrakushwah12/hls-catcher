@@ -13,10 +13,30 @@ const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
   await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
 configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
 
-// A real frame of the playing tab, as the card thumbnail - no video decoding
-// needed. All cards share it (they're all from this one page/video).
-const thumbDataUrl = await chrome.tabs
-  .captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 })
+// The actual <video> frame (not a tab screenshot) as the card thumbnail. Runs
+// in the page, draws the current frame to a canvas. Tainted canvases (a
+// cross-origin <video> without CORS) throw on export -> null -> placeholder.
+const thumbDataUrl = await chrome.scripting
+  .executeScript({
+    target: { tabId: tab.id, allFrames: true }, // players are often in an iframe
+    func: () => {
+      const v = [...document.querySelectorAll("video")]
+        .filter((v) => v.videoWidth > 0)
+        .sort((a, b) => b.videoWidth * b.videoHeight - a.videoWidth * a.videoHeight)[0];
+      if (!v) return null;
+      const c = document.createElement("canvas");
+      const scale = Math.min(1, 320 / v.videoWidth);
+      c.width = v.videoWidth * scale;
+      c.height = v.videoHeight * scale;
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      try {
+        return c.toDataURL("image/jpeg", 0.7);
+      } catch {
+        return null;
+      }
+    },
+  })
+  .then((results) => results.map((r) => r.result).find(Boolean) ?? null)
   .catch(() => null);
 
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
@@ -112,8 +132,8 @@ async function card(url) {
     duration(picker.value).then((t) => {
       durText.textContent = t;
       durChip.hidden = !t;
-      el.querySelector(".thumbBadge").textContent =
-        picker.selectedOptions[0].textContent.split(" · ")[0];
+      if (variants.length)
+        el.querySelector(".thumbBadge").textContent = picker.selectedOptions[0].textContent.split(" · ")[0];
     });
   picker.onchange = refresh;
   refresh();
@@ -149,7 +169,8 @@ async function card(url) {
   split.append(go, chev, menu);
 
   row.textContent = "";
-  row.append(picker, split);
+  // Single-stream playlists have one option — no picker worth showing.
+  row.append(...(variants.length ? [picker, split] : [split]));
   status.textContent = variants.length
     ? `${variants.length} quality option${variants.length === 1 ? "" : "s"}`
     : "single playlist";
