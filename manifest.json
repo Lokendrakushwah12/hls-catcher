@@ -11,6 +11,7 @@
     "tabs",
     "sidePanel",
     "offscreen",
+    "webNavigation",
     "downloads"
   ],
   "host_permissions": [

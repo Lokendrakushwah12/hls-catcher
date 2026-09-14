@@ -56,7 +56,10 @@ chrome.webRequest.onBeforeRequest.addListener(
 
     const { [k]: found = [] } = await chrome.storage.session.get(k);
     if (!found.some((entry) => entry.url === url)) {
-      found.push({ id: requestId, url, body: null });
+      // Stamp the page title now so a card keeps its own song's title even after
+      // the page moves on to the next song.
+      const t = await chrome.tabs.get(tabId).catch(() => null);
+      found.push({ id: requestId, url, body: null, title: t?.title || "" });
       await chrome.storage.session.set({ [k]: found });
       chrome.action.setBadgeText({ tabId, text: String(found.length) });
     }
@@ -76,16 +79,18 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   ["requestHeaders", "extraHeaders"]
 );
 
-// Service workers get killed after ~30s idle, so the list lives in
-// storage.session rather than a module-scoped Map.
-chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (info.status !== "loading" || !info.url) return;
-  chrome.storage.session.remove([key(tabId), `ref${tabId}`]);
+// Clear a tab's captures only on a real top-document load (reload/navigation),
+// NOT on SPA song changes (those fire onHistoryStateUpdated, not onCommitted).
+// So manifests accumulate across songs until the user actually refreshes.
+// (Service workers idle-die, so the list lives in storage.session, not a Map.)
+chrome.webNavigation.onCommitted.addListener(({ tabId, frameId }) => {
+  if (frameId !== 0) return;
+  chrome.storage.session.remove([key(tabId), `ref${tabId}`, `thumbs${tabId}`]);
   chrome.action.setBadgeText({ tabId, text: "" });
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove(key(tabId));
+  chrome.storage.session.remove([key(tabId), `ref${tabId}`, `thumbs${tabId}`]);
 });
 
 // The popup hands downloads to an offscreen document so they keep running after

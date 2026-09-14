@@ -183,6 +183,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    margin-top: 12px;
   }
   .row {
     display: flex;
@@ -312,6 +313,18 @@
   .row .btn { height: 32px; }
   .row .chev { height: 32px; }
 
+  /* --- skeleton loading --- */
+  @keyframes shimmer { 0% { background-position: -240px 0; } 100% { background-position: 240px 0; } }
+  .skel {
+    background: #2a2a31 linear-gradient(90deg, #2a2a31 0, #35353d 40px, #2a2a31 80px) 0 0 / 240px 100%;
+    border-radius: 999px;
+    animation: shimmer 1.15s infinite linear;
+  }
+  .skRow { display: flex; gap: 8px; align-items: center; }
+  .skSelect { height: 32px; flex: 1; }
+  .skBtn { height: 32px; width: 128px; }
+  .skChip { height: 20px; width: 62px; display: inline-block; }
+
   /* --- download progress --- */
   .progress { height: 6px; margin-top: 6px; border-radius: 999px; background: #2f2f35; overflow: hidden; }
   .progress > span { display: block; height: 100%; width: 0; background: #2563eb; transition: width 0.2s; }
@@ -328,7 +341,7 @@
     <div class="subtitle">Capturing manifests from the active tab</div>
   </div>
 
-  <div id="out" class="empty">Nothing yet — play the video, or reload the page.</div>
+  <div id="out" class="empty">Nothing yet - play the video, or reload the page.</div>
 </div>
 
 <script type="module" src="popup.js"></script>

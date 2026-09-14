@@ -34,7 +34,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   render();
 });
 let currentReferer = null; // captured Referer for this tab (may change per song)
-let thumbDataUrl = null; // current <video> frame
+let thumbsByUrl = {}; // manifest url -> saved frame, so old cards keep their own
 let pageTitle = tab.title || ""; // song title, refreshed from the page each render
 
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
@@ -55,7 +55,7 @@ const isAudioOnly = (variants) =>
 const VIDEO_FORMATS = ["mp4", "webm", "mkv"];
 const AUDIO_FORMATS = ["m4a", "webm", "mkv"];
 
-// Pick a container the codec is actually valid in — VP9/Opus in .mp4 won't play
+// Pick a container the codec is actually valid in - VP9/Opus in .mp4 won't play
 // (QuickTime rejects it). H.264/HEVC/AV1 -> mp4; VP8/VP9 -> webm; else mkv.
 const containerFor = (codecs = "") =>
   /avc|h264|hvc|hev|av01/.test(codecs) ? "mp4" : /vp0|vp8|vp9/.test(codecs) ? "webm" : "mkv";
@@ -97,13 +97,23 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 async function render() {
-  const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
-    await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
+  const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer, [`thumbs${tab.id}`]: thumbs = {} } =
+    await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`, `thumbs${tab.id}`]);
   currentReferer = capturedReferer;
   configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
   const page = await capturePage();
-  thumbDataUrl = page.thumb;
   pageTitle = page.title || tab.title || "";
+  // Stamp each not-yet-seen manifest with the current frame, once, and persist
+  // it (separate key so this write doesn't retrigger the manifest-list listener).
+  if (page.thumb) {
+    let dirty = false;
+    for (const u of urls) {
+      const k = typeof u === "string" ? u : u.url;
+      if (!thumbs[k]) ((thumbs[k] = page.thumb), (dirty = true));
+    }
+    if (dirty) chrome.storage.session.set({ [`thumbs${tab.id}`]: thumbs });
+  }
+  thumbsByUrl = thumbs;
   catalog.length = 0;
   out.textContent = "";
   if (urls.length) {
@@ -118,7 +128,7 @@ async function render() {
 }
 
 // Grab, from the page, the current <video> frame (as the thumbnail) and the
-// accurate song title from the media-session metadata — document.title on
+// accurate song title from the media-session metadata - document.title on
 // YouTube is often just "YouTube Music". Runs in all frames (player is often an
 // iframe); tainted canvases (cross-origin <video>) yield no thumb.
 function capturePage() {
@@ -166,6 +176,7 @@ async function card(url) {
           <span class="chip">Manifest</span>
           <span class="chip dur" hidden>${ICON.clock}<span class="durText"></span></span>
           <span class="chip size" hidden><span class="sizeText"></span></span>
+          <span class="skel skChip"></span>
         </div>
         <div class="titleEdit">
           <div class="streamTitle" contenteditable="true" spellcheck="false"></div>
@@ -190,8 +201,9 @@ async function card(url) {
 
   const manifestUrl = typeof url === "string" ? url : url.url;
   const manifestBody = typeof url === "string" ? null : url.body;
+  const entryTitle = typeof url === "string" ? "" : url.title;
 
-  title.textContent = pageTitle || streamName(manifestUrl);
+  title.textContent = entryTitle || pageTitle || streamName(manifestUrl);
   // Enter commits (no newline); the pencil focuses and selects the text.
   title.onkeydown = (e) => {
     if (e.key === "Enter") { e.preventDefault(); title.blur(); }
@@ -200,10 +212,12 @@ async function card(url) {
     title.focus();
     getSelection().selectAllChildren(title);
   };
-  if (thumbDataUrl) el.querySelector(".thumb").style.backgroundImage = `url("${thumbDataUrl}")`;
+  const thumb = thumbsByUrl[manifestUrl];
+  if (thumb) el.querySelector(".thumb").style.backgroundImage = `url("${thumb}")`;
   el.querySelector(".copyBtn").onclick = (e) =>
     copyToClipboard(manifestUrl, e.currentTarget.querySelector("span"));
-  row.textContent = "reading…";
+  row.className = "row skRow";
+  row.innerHTML = `<div class="skel skSelect"></div><div class="skel skBtn"></div>`;
 
   let variants = [];
   let masterAudioUrl = null; // demuxed audio rendition declared in this master
@@ -214,7 +228,9 @@ async function card(url) {
     variants = parseMaster(text, resolvedUrl);
     masterAudioUrl = parseAudioRenditions(text, resolvedUrl)[0] || null;
   } catch (error) {
+    row.className = "row";
     row.textContent = `could not fetch manifest${error?.message ? ` (${error.message})` : ""}`;
+    el.querySelector(".skChip")?.remove();
     return el;
   }
 
@@ -247,6 +263,7 @@ async function card(url) {
     // Default the container to one the selected codec is valid in.
     if (!audioOnly && !fmtTouched) fmt.value = containerFor(codecsByUrl.get(picker.value));
     const secs = await duration(picker.value);
+    el.querySelector(".skChip")?.remove(); // done loading the meta chips
     durText.textContent = secs ? formatTime(secs) : "live";
     durChip.hidden = secs == null;
     if (variants.length)
@@ -274,7 +291,7 @@ async function card(url) {
   // Split Download button. Primary attaches the paired audio track whenever the
   // tab has a separate one (demuxed sites like YouTube) so it isn't silent.
   // pairedAudio() only returns audio/media-playlist manifests, never a video
-  // master, and we only map audio from it — so attaching is always safe.
+  // master, and we only map audio from it - so attaching is always safe.
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
@@ -313,6 +330,7 @@ async function card(url) {
   split.className = "split";
   split.append(go, chev, menu);
 
+  row.className = "row";
   row.textContent = "";
   // Single-stream playlists have one option - no quality picker worth showing.
   row.append(...(variants.length ? [picker] : []), fmt, split);

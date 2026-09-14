@@ -91,7 +91,7 @@ async function process(video, audio, format, onProgress) {
   };
 
   // Try the requested container; if the codec isn't valid in it, fall back to
-  // MKV, which holds anything — so we never hand back an unplayable file.
+  // MKV, which holds anything - so we never hand back an unplayable file.
   let ext = format;
   ffLog.length = 0;
   let code = await ff.exec(build(format));
@@ -103,7 +103,7 @@ async function process(video, audio, format, onProgress) {
     // Surface what ffmpeg saw in the inputs so we can tell audio-vs-video.
     const streams = ffLog.filter((l) => /Input #|Stream #\d:\d/.test(l)).map((l) => l.trim());
     const err = ffLog.filter((l) => /error|invalid|matches no/i.test(l)).slice(-1)[0] || "remux failed";
-    throw new Error(`${err.trim()} — ${streams.join(" | ")}`.slice(0, 300));
+    throw new Error(`${err.trim()} - ${streams.join(" | ")}`.slice(0, 300));
   }
 
   const data = await ff.readFile(`out.${ext}`);
