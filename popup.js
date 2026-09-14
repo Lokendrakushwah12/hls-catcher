@@ -25,7 +25,6 @@ const AUDIO_CODEC = /(mp4a|opus|ac-3|ec-3|flac|vorbis|dts|alac)/; // anywhere in
 const VIDEO_CODEC = /(avc|hvc|hev|av01|vp0|vp8|vp9|dvh)/;
 const isAudioOnly = (variants) =>
   variants.length > 0 && variants.every((v) => AUDIO_CODEC.test(v.codecs) && !VIDEO_CODEC.test(v.codecs));
-const isVideoOnly = (codecs = "") => VIDEO_CODEC.test(codecs) && !AUDIO_CODEC.test(codecs);
 
 // Formats we can reach with `-c copy` (container change, no re-encode).
 const VIDEO_FORMATS = ["mp4", "webm", "mkv"];
@@ -225,15 +224,19 @@ async function card(url) {
   const pairedAudio = () =>
     catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist))?.audioPlaylistUrl;
 
+  // Muxing an unknown audio codec into mp4/webm can be invalid; MKV holds any
+  // video+audio pair, so use it whenever we attach a separate audio track.
   const run = (audioUrl) =>
-    startDownload({ playlistUrl: picker.value, audioUrl, name: fileName(title.textContent), format: fmt.value, go, picker, status, bar });
+    startDownload({ playlistUrl: picker.value, audioUrl, name: fileName(title.textContent),
+      format: audioUrl ? "mkv" : fmt.value, go, picker, status, bar });
 
-  // Split Download button. Primary auto-attaches the paired audio when this
-  // variant is video-only (demuxed sites like YouTube) so it isn't silent.
+  // Split Download button. Primary attaches the paired audio unless this variant
+  // already carries audio itself — so demuxed streams aren't downloaded silent.
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
-  go.onclick = () => run(isVideoOnly(codecsByUrl.get(picker.value)) ? pairedAudio() : undefined);
+  const alreadyHasAudio = () => AUDIO_CODEC.test(codecsByUrl.get(picker.value) || "");
+  go.onclick = () => run(alreadyHasAudio() ? undefined : pairedAudio());
 
   const chev = document.createElement("button");
   chev.className = "chev";

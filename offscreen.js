@@ -25,11 +25,11 @@ async function run({ playlistUrl, audioUrl, name, format, referer }) {
       audio = await assembleTrack(audioUrl, progress);
     }
     status("processing…");
-    const out = await process(video, audio, format, (p) => status(`processing… ${Math.round(p * 100)}%`));
+    const { data, ext } = await process(video, audio, format, (p) => status(`processing… ${Math.round(p * 100)}%`));
 
-    const blobUrl = URL.createObjectURL(new Blob([out], { type: MIME[format] || "application/octet-stream" }));
+    const blobUrl = URL.createObjectURL(new Blob([data], { type: MIME[ext] || "application/octet-stream" }));
     // chrome.downloads isn't available here - the SW saves and resolves once done.
-    const res = await chrome.runtime.sendMessage({ type: "save", blobUrl, filename: `${name}.${format}` });
+    const res = await chrome.runtime.sendMessage({ type: "save", blobUrl, filename: `${name}.${ext}` });
     URL.revokeObjectURL(blobUrl);
     if (res?.error) throw new Error(res.error);
     report({ type: "done", playlistUrl });
@@ -77,22 +77,32 @@ async function process(video, audio, format, onProgress) {
   const ff = await loadFfmpeg();
   onFfmpegProgress = onProgress;
   const inV = `v.${video.container}`;
-  const out = `out.${format}`;
-  const fast = format === "mp4" ? ["-movflags", "+faststart"] : [];
   await ff.writeFile(inV, video.data);
-  let args;
+  let inA;
   if (audio) {
-    const inA = `a.${audio.container}`;
+    inA = `a.${audio.container}`;
     await ff.writeFile(inA, audio.data);
-    args = ["-i", inV, "-i", inA, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...fast, out];
-  } else {
-    args = ["-i", inV, "-c", "copy", ...fast, out];
   }
-  const code = await ff.exec(args);
-  if (code !== 0) throw new Error("ffmpeg could not produce this format (codec/container mismatch?)");
-  const data = await ff.readFile(out);
+  const build = (fmt) => {
+    const fast = fmt === "mp4" ? ["-movflags", "+faststart"] : [];
+    return audio
+      ? ["-i", inV, "-i", inA, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy", ...fast, `out.${fmt}`]
+      : ["-i", inV, "-c", "copy", ...fast, `out.${fmt}`];
+  };
+
+  // Try the requested container; if the codec isn't valid in it, fall back to
+  // MKV, which holds anything — so we never hand back an unplayable file.
+  let ext = format;
+  let code = await ff.exec(build(format));
+  if (code !== 0 && format !== "mkv") {
+    ext = "mkv";
+    code = await ff.exec(build("mkv"));
+  }
+  if (code !== 0) throw new Error("ffmpeg could not remux this stream");
+
+  const data = await ff.readFile(`out.${ext}`);
   onFfmpegProgress = null;
-  return data;
+  return { data, ext };
 }
 
 let ffmpegPromise = null;
