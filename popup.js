@@ -101,6 +101,7 @@ async function card(url) {
           <span class="chip blue">HLS</span>
           <span class="chip">Manifest</span>
           <span class="chip dur" hidden>${ICON.clock}<span class="durText"></span></span>
+          <span class="chip size" hidden><span class="sizeText"></span></span>
         </div>
         <div class="titleEdit">
           <div class="streamTitle" contenteditable="true" spellcheck="false"></div>
@@ -120,6 +121,8 @@ async function card(url) {
   const bar = el.querySelector(".progress");
   const durChip = el.querySelector(".chip.dur");
   const durText = el.querySelector(".durText");
+  const sizeChip = el.querySelector(".chip.size");
+  const sizeText = el.querySelector(".sizeText");
 
   const manifestUrl = typeof url === "string" ? url : url.url;
   const manifestBody = typeof url === "string" ? null : url.body;
@@ -170,13 +173,18 @@ async function card(url) {
   fmt.title = "Output format";
   for (const f of audioOnly ? AUDIO_FORMATS : VIDEO_FORMATS) fmt.append(new Option(f.toUpperCase(), f));
 
-  const refresh = () =>
-    duration(picker.value).then((t) => {
-      durText.textContent = t;
-      durChip.hidden = !t;
-      if (variants.length)
-        el.querySelector(".thumbBadge").textContent = picker.selectedOptions[0].textContent.split(" · ")[0];
-    });
+  const bwByUrl = new Map(variants.map((v) => [v.url, v.bandwidth]));
+  const refresh = async () => {
+    const secs = await duration(picker.value);
+    durText.textContent = secs ? formatTime(secs) : "live";
+    durChip.hidden = secs == null;
+    if (variants.length)
+      el.querySelector(".thumbBadge").textContent = picker.selectedOptions[0].textContent.split(" · ")[0];
+    // size ≈ bitrate × duration ÷ 8 (remux keeps the bytes; VBR makes it a ~).
+    const bw = bwByUrl.get(picker.value);
+    sizeChip.hidden = !(bw && secs);
+    if (bw && secs) sizeText.textContent = "~" + formatSize((bw / 8) * secs);
+  };
   picker.onchange = refresh;
   refresh();
 
@@ -268,12 +276,14 @@ function startDownload({ playlistUrl, audioUrl, name, format, go, picker, status
 async function duration(url) {
   try {
     const { text } = await fetchText(url);
-    const secs = parseDuration(text);
-    return secs ? formatTime(secs) : "live";
+    return parseDuration(text); // seconds; 0 for a live/empty playlist
   } catch {
-    return "";
+    return null;
   }
 }
+
+const formatSize = (bytes) =>
+  bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${Math.round(bytes / 1e6)} MB`;
 
 function streamName(url) {
   try {
