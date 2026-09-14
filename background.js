@@ -93,15 +93,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-async function startDownload({ playlistUrl, name, referer }) {
+async function startDownload({ playlistUrl, audioUrl, name, format, referer }) {
   if (!(await chrome.offscreen.hasDocument())) {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
       reasons: ["BLOBS"],
-      justification: "Assemble and save HLS video segments in the background.",
+      justification: "Assemble, remux and save HLS video segments in the background.",
     });
   }
-  chrome.runtime.sendMessage({ type: "offscreen-download", playlistUrl, name, referer });
+  chrome.runtime.sendMessage({ type: "offscreen-download", playlistUrl, audioUrl, name, format, referer });
 }
 
 // DNR rule 778 covers the offscreen doc's fetches. Merge into the existing rule

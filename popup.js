@@ -42,8 +42,20 @@ const thumbDataUrl = await chrome.scripting
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
 const jobs = new Map(); // playlistUrl -> (msg) => void
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "progress" || msg.type === "done" || msg.type === "error") jobs.get(msg.playlistUrl)?.(msg);
+  if (["progress", "status", "done", "error"].includes(msg.type)) jobs.get(msg.playlistUrl)?.(msg);
 });
+
+// Manifests on this tab, for pairing a video track with its demuxed audio.
+const catalog = []; // { manifestUrl, audioOnly, mediaPlaylist, audioPlaylistUrl }
+
+const AUDIO_CODEC = /^(mp4a|opus|ac-3|ec-3|flac|vorbis)/;
+const VIDEO_CODEC = /(avc|hvc|hev|av01|vp0|vp8|vp9|dvh)/;
+const isAudioOnly = (variants) =>
+  variants.length > 0 && variants.every((v) => AUDIO_CODEC.test(v.codecs) && !VIDEO_CODEC.test(v.codecs));
+
+// Formats we can reach with `-c copy` (container change, no re-encode).
+const VIDEO_FORMATS = ["mp4", "mkv"];
+const AUDIO_FORMATS = ["m4a", "mkv"];
 
 // Heroicons (solid/mini, 20px) inlined - external icon fetches are CSP-blocked.
 const ICON = {
@@ -137,12 +149,26 @@ async function card(url) {
     return el;
   }
 
+  const audioOnly = isAudioOnly(variants);
+  catalog.push({
+    manifestUrl,
+    audioOnly,
+    mediaPlaylist: !variants.length,
+    audioPlaylistUrl: audioOnly && variants.length ? variants[0].url : manifestUrl,
+  });
+
   // A media playlist has no variants - it *is* the stream.
   const picker = document.createElement("select");
   for (const v of variants) {
     picker.append(new Option(`${v.resolution} · ${Math.round(v.bandwidth / 1000)} kbps`, v.url));
   }
   if (!variants.length) picker.append(new Option("single stream", manifestUrl));
+
+  // Output container. ffmpeg remuxes to this (no more raw .ts).
+  const fmt = document.createElement("select");
+  fmt.className = "fmt";
+  fmt.title = "Output format";
+  for (const f of audioOnly ? AUDIO_FORMATS : VIDEO_FORMATS) fmt.append(new Option(f.toUpperCase(), f));
 
   const refresh = () =>
     duration(picker.value).then((t) => {
@@ -154,11 +180,14 @@ async function card(url) {
   picker.onchange = refresh;
   refresh();
 
-  // Split Download button: main action + chevron menu (copy the stream URL).
+  const start = (audioUrl) =>
+    startDownload({ playlistUrl: picker.value, audioUrl, name: fileName(title.textContent), format: fmt.value, go, picker, status, bar });
+
+  // Split Download button: main action + chevron menu.
   const go = document.createElement("button");
   go.className = "btn";
   go.innerHTML = `${ICON.download}<span>Download</span>`;
-  go.onclick = () => startDownload(picker, go, status, bar, fileName(title.textContent));
+  go.onclick = () => start();
 
   const chev = document.createElement("button");
   chev.className = "chev";
@@ -168,6 +197,20 @@ async function card(url) {
   const menu = document.createElement("div");
   menu.className = "menu";
   menu.hidden = true;
+
+  // On demuxed sites (e.g. YouTube) the audio is a separate manifest — offer to
+  // fetch it and mux into one file.
+  if (variants.length && !audioOnly) {
+    const muxItem = document.createElement("button");
+    muxItem.innerHTML = `${ICON.download}<span>Download with audio</span>`;
+    muxItem.onclick = () => {
+      const audio = catalog.find((c) => c.manifestUrl !== manifestUrl && (c.audioOnly || c.mediaPlaylist));
+      if (!audio) return void (status.textContent = "no separate audio track found");
+      start(audio.audioPlaylistUrl);
+    };
+    menu.append(muxItem);
+  }
+
   const copyStream = document.createElement("button");
   copyStream.innerHTML = `${ICON.copy}<span>Copy stream URL</span>`;
   copyStream.onclick = (e) => copyToClipboard(picker.value, e.currentTarget.querySelector("span"));
@@ -185,27 +228,27 @@ async function card(url) {
   split.append(go, chev, menu);
 
   row.textContent = "";
-  // Single-stream playlists have one option - no picker worth showing.
-  row.append(...(variants.length ? [picker, split] : [split]));
+  // Single-stream playlists have one option - no quality picker worth showing.
+  row.append(...(variants.length ? [picker] : []), fmt, split);
   status.textContent = variants.length
     ? `${variants.length} quality option${variants.length === 1 ? "" : "s"}`
     : "single playlist";
   return el;
 }
 
-// Hand the selected quality to the background; reflect progress here.
-function startDownload(picker, go, status, bar, name) {
-  const playlistUrl = picker.value;
+// Hand the job to the background; reflect its progress here.
+function startDownload({ playlistUrl, audioUrl, name, format, go, picker, status, bar }) {
   const fill = bar.firstElementChild;
   go.disabled = picker.disabled = true;
   bar.hidden = false;
   fill.style.width = "0%";
   status.textContent = "starting…";
   jobs.set(playlistUrl, (msg) => {
+    if (msg.type === "status") return void (status.textContent = msg.text);
     if (msg.type === "progress") {
       const pct = msg.total ? Math.round((msg.done / msg.total) * 100) : 0;
       fill.style.width = `${pct}%`;
-      status.textContent = `${pct}% · ${(msg.bytes / 1e6).toFixed(1)} MB · ${msg.done}/${msg.total} segments`;
+      status.textContent = `${pct}% · ${(msg.bytes / 1e6).toFixed(1)} MB`;
       return;
     }
     if (msg.type === "done") {
@@ -219,7 +262,7 @@ function startDownload(picker, go, status, bar, name) {
     jobs.delete(playlistUrl);
   });
   // Handed to the background - keeps running even if this popup/panel closes.
-  chrome.runtime.sendMessage({ type: "download", playlistUrl, name, referer: capturedReferer });
+  chrome.runtime.sendMessage({ type: "download", playlistUrl, audioUrl, name, format, referer: capturedReferer });
 }
 
 async function duration(url) {
