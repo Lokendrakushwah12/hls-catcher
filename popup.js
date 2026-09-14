@@ -4,13 +4,38 @@ import { configure, fetchText } from "./net.js";
 const out = document.getElementById("out");
 const countChip = document.getElementById("countChip");
 
-// A popup can't be repositioned; the side panel is Chrome's right-side dock.
-document.getElementById("dockBtn").onclick = () =>
-  chrome.sidePanel.open({ tabId: tab.id }).then(() => window.close());
+// Same page serves both surfaces; the side-panel path carries ?dock=1. The
+// button flips between them (and the SW persists the choice for next open).
+const inDock = new URLSearchParams(location.search).has("dock");
+const modeBtn = document.getElementById("modeBtn");
+const PANEL_ICON = `<svg class="ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 3A2.25 2.25 0 0 0 2 5.25v9.5A2.25 2.25 0 0 0 4.25 17h11.5A2.25 2.25 0 0 0 18 14.75v-9.5A2.25 2.25 0 0 0 15.75 3H4.25ZM12 4.5v11h3.75a.75.75 0 0 0 .75-.75v-9.5a.75.75 0 0 0-.75-.75H12Z" clip-rule="evenodd"/></svg>`;
+modeBtn.innerHTML = `${PANEL_ICON}<span>${inDock ? "Undock" : "Dock right"}</span>`;
+modeBtn.onclick = async () => {
+  if (inDock) {
+    // Panel -> toolbar popup.
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+    await chrome.action.setPopup({ popup: "popup.html" });
+    await chrome.storage.local.set({ mode: "popup" });
+  } else {
+    // Popup -> side panel. open() first so it stays inside the user gesture.
+    await chrome.sidePanel.open({ tabId: tab.id });
+    await chrome.action.setPopup({ popup: "" });
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    await chrome.storage.local.set({ mode: "dock" });
+  }
+  window.close();
+};
 
-const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+// Runs as Chrome's side panel. It's global across the window, so follow the
+// active tab: re-render when the user switches tabs.
+let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  tab = await chrome.tabs.get(tabId).catch(() => tab);
+  render();
+});
 let currentReferer = null; // captured Referer for this tab (may change per song)
 let thumbDataUrl = null; // current <video> frame
+let pageTitle = tab.title || ""; // song title, refreshed from the page each render
 
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
 const jobs = new Map(); // playlistUrl -> (msg) => void
@@ -76,7 +101,9 @@ async function render() {
     await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
   currentReferer = capturedReferer;
   configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
-  thumbDataUrl = await captureThumb();
+  const page = await capturePage();
+  thumbDataUrl = page.thumb;
+  pageTitle = page.title || tab.title || "";
   catalog.length = 0;
   out.textContent = "";
   if (urls.length) {
@@ -90,32 +117,41 @@ async function render() {
   }
 }
 
-// The actual <video> frame (not a tab screenshot) as the card thumbnail. Runs
-// in the page, draws the current frame to a canvas. Tainted canvases (a
-// cross-origin <video> without CORS) throw on export -> null -> placeholder.
-function captureThumb() {
+// Grab, from the page, the current <video> frame (as the thumbnail) and the
+// accurate song title from the media-session metadata — document.title on
+// YouTube is often just "YouTube Music". Runs in all frames (player is often an
+// iframe); tainted canvases (cross-origin <video>) yield no thumb.
+function capturePage() {
   return chrome.scripting
     .executeScript({
-      target: { tabId: tab.id, allFrames: true }, // players are often in an iframe
+      target: { tabId: tab.id, allFrames: true },
       func: () => {
+        const md = navigator.mediaSession?.metadata;
+        const title = md?.title ? (md.artist ? `${md.title} - ${md.artist}` : md.title) : "";
         const v = [...document.querySelectorAll("video")]
           .filter((v) => v.videoWidth > 0)
           .sort((a, b) => b.videoWidth * b.videoHeight - a.videoWidth * a.videoHeight)[0];
-        if (!v) return null;
-        const c = document.createElement("canvas");
-        const scale = Math.min(1, 320 / v.videoWidth);
-        c.width = v.videoWidth * scale;
-        c.height = v.videoHeight * scale;
-        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-        try {
-          return c.toDataURL("image/jpeg", 0.7);
-        } catch {
-          return null;
+        let thumb = null;
+        if (v) {
+          const c = document.createElement("canvas");
+          const scale = Math.min(1, 320 / v.videoWidth);
+          c.width = v.videoWidth * scale;
+          c.height = v.videoHeight * scale;
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          try {
+            thumb = c.toDataURL("image/jpeg", 0.7);
+          } catch {
+            /* cross-origin video -> tainted canvas */
+          }
         }
+        return { thumb, title };
       },
     })
-    .then((results) => results.map((r) => r.result).find(Boolean) ?? null)
-    .catch(() => null);
+    .then((results) => {
+      const r = results.map((x) => x.result).filter(Boolean);
+      return { thumb: r.find((x) => x.thumb)?.thumb ?? null, title: r.find((x) => x.title)?.title ?? "" };
+    })
+    .catch(() => ({ thumb: null, title: "" }));
 }
 
 async function card(url) {
@@ -155,7 +191,7 @@ async function card(url) {
   const manifestUrl = typeof url === "string" ? url : url.url;
   const manifestBody = typeof url === "string" ? null : url.body;
 
-  title.textContent = tab.title || streamName(manifestUrl);
+  title.textContent = pageTitle || streamName(manifestUrl);
   // Enter commits (no newline); the pencil focuses and selects the text.
   title.onkeydown = (e) => {
     if (e.key === "Enter") { e.preventDefault(); title.blur(); }

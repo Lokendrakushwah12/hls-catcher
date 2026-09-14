@@ -1,3 +1,17 @@
+// The toolbar icon opens either the side panel (dock) or a popup, per the
+// user's saved choice. Applied on startup so the preference survives restarts.
+chrome.storage.local.get("mode").then(({ mode }) => applyMode(mode === "popup" ? "popup" : "dock"));
+
+async function applyMode(mode) {
+  if (mode === "popup") {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+    await chrome.action.setPopup({ popup: "popup.html" }).catch(() => {});
+  } else {
+    await chrome.action.setPopup({ popup: "" }).catch(() => {});
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  }
+}
+
 // Observational webRequest: MV3 dropped the *blocking* version, but a plain
 // listener still sees every request the page makes, before the popup opens.
 const MANIFEST = /\.(m3u8|mpd)(\?|$)/i;
