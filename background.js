@@ -129,7 +129,7 @@ async function spoofHost(host, referer) {
   });
 }
 
-// Save the offscreen's blob URL, and only respond once the download finishes —
+// Save the offscreen's blob URL, and only respond once the download finishes -
 // that keeps the offscreen doc (and its blob) alive until Chrome has the bytes.
 function saveBlob(blobUrl, filename, sendResponse) {
   chrome.downloads

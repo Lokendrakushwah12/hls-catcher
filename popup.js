@@ -9,35 +9,8 @@ document.getElementById("dockBtn").onclick = () =>
   chrome.sidePanel.open({ tabId: tab.id }).then(() => window.close());
 
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
-  await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
-configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
-
-// The actual <video> frame (not a tab screenshot) as the card thumbnail. Runs
-// in the page, draws the current frame to a canvas. Tainted canvases (a
-// cross-origin <video> without CORS) throw on export -> null -> placeholder.
-const thumbDataUrl = await chrome.scripting
-  .executeScript({
-    target: { tabId: tab.id, allFrames: true }, // players are often in an iframe
-    func: () => {
-      const v = [...document.querySelectorAll("video")]
-        .filter((v) => v.videoWidth > 0)
-        .sort((a, b) => b.videoWidth * b.videoHeight - a.videoWidth * a.videoHeight)[0];
-      if (!v) return null;
-      const c = document.createElement("canvas");
-      const scale = Math.min(1, 320 / v.videoWidth);
-      c.width = v.videoWidth * scale;
-      c.height = v.videoHeight * scale;
-      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-      try {
-        return c.toDataURL("image/jpeg", 0.7);
-      } catch {
-        return null;
-      }
-    },
-  })
-  .then((results) => results.map((r) => r.result).find(Boolean) ?? null)
-  .catch(() => null);
+let currentReferer = null; // captured Referer for this tab (may change per song)
+let thumbDataUrl = null; // current <video> frame
 
 // Downloads run in the offscreen doc; it reports back here (if we're still open).
 const jobs = new Map(); // playlistUrl -> (msg) => void
@@ -81,13 +54,63 @@ async function copyToClipboard(url, labelEl) {
 // One open menu at a time.
 document.addEventListener("click", () => document.querySelectorAll(".menu").forEach((m) => (m.hidden = true)));
 
-if (urls.length) {
-  out.className = "list";
+await render();
+
+// The side panel stays open across song/page changes, so re-render when this
+// tab's captured list changes. (The popup re-runs on each open, so it's covered
+// there too.) Skip while a download is active so we don't wipe its live UI.
+let rerenderTimer;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session" || !(`tab${tab.id}` in changes) || jobs.size) return;
+  clearTimeout(rerenderTimer);
+  rerenderTimer = setTimeout(render, 300);
+});
+
+async function render() {
+  const { [`tab${tab.id}`]: urls = [], [`ref${tab.id}`]: capturedReferer } =
+    await chrome.storage.session.get([`tab${tab.id}`, `ref${tab.id}`]);
+  currentReferer = capturedReferer;
+  configure(capturedReferer, 777); // popup's own DNR rule id; offscreen uses 778
+  thumbDataUrl = await captureThumb();
+  catalog.length = 0;
   out.textContent = "";
-  countChip.textContent = `${urls.length} found`;
-  for (const url of urls) out.append(await card(url));
-} else {
-  countChip.textContent = "0 found";
+  if (urls.length) {
+    out.className = "list";
+    countChip.textContent = `${urls.length} found`;
+    for (const url of urls) out.append(await card(url));
+  } else {
+    out.className = "empty";
+    out.textContent = "Nothing yet - play the video with this open, or reload the page.";
+    countChip.textContent = "0 found";
+  }
+}
+
+// The actual <video> frame (not a tab screenshot) as the card thumbnail. Runs
+// in the page, draws the current frame to a canvas. Tainted canvases (a
+// cross-origin <video> without CORS) throw on export -> null -> placeholder.
+function captureThumb() {
+  return chrome.scripting
+    .executeScript({
+      target: { tabId: tab.id, allFrames: true }, // players are often in an iframe
+      func: () => {
+        const v = [...document.querySelectorAll("video")]
+          .filter((v) => v.videoWidth > 0)
+          .sort((a, b) => b.videoWidth * b.videoHeight - a.videoWidth * a.videoHeight)[0];
+        if (!v) return null;
+        const c = document.createElement("canvas");
+        const scale = Math.min(1, 320 / v.videoWidth);
+        c.width = v.videoWidth * scale;
+        c.height = v.videoHeight * scale;
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        try {
+          return c.toDataURL("image/jpeg", 0.7);
+        } catch {
+          return null;
+        }
+      },
+    })
+    .then((results) => results.map((r) => r.result).find(Boolean) ?? null)
+    .catch(() => null);
 }
 
 async function card(url) {
@@ -206,7 +229,7 @@ async function card(url) {
   menu.className = "menu";
   menu.hidden = true;
 
-  // On demuxed sites (e.g. YouTube) the audio is a separate manifest — offer to
+  // On demuxed sites (e.g. YouTube) the audio is a separate manifest - offer to
   // fetch it and mux into one file.
   if (variants.length && !audioOnly) {
     const muxItem = document.createElement("button");
@@ -270,7 +293,7 @@ function startDownload({ playlistUrl, audioUrl, name, format, go, picker, status
     jobs.delete(playlistUrl);
   });
   // Handed to the background - keeps running even if this popup/panel closes.
-  chrome.runtime.sendMessage({ type: "download", playlistUrl, audioUrl, name, format, referer: capturedReferer });
+  chrome.runtime.sendMessage({ type: "download", playlistUrl, audioUrl, name, format, referer: currentReferer });
 }
 
 async function duration(url) {

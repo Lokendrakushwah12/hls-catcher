@@ -2,8 +2,8 @@
 // extension (host_permissions = no CORS wall) while a DNR rule rewrites
 // Referer/Origin to the player's, to pass CDN hotlink checks.
 //
-// The popup can set DNR rules itself. The offscreen doc CANNOT — it only has
-// chrome.runtime — so there it runs in "relay" mode: it asks the service
+// The popup can set DNR rules itself. The offscreen doc CANNOT - it only has
+// chrome.runtime - so there it runs in "relay" mode: it asks the service
 // worker (which does have declarativeNetRequest) to cover each host instead.
 let pageReferer = null;
 let ruleId = 777;
@@ -62,7 +62,7 @@ async function spoofReferer(url) {
         type: "modifyHeaders",
         requestHeaders: [
           { header: "referer", operation: "set", value: referer },
-          // ponytail: drop this Origin line if a CDN 403s on it — Referer is
+          // ponytail: drop this Origin line if a CDN 403s on it - Referer is
           // the usual hotlink signal, Origin only matters for stricter ones.
           { header: "origin", operation: "set", value: origin },
         ],

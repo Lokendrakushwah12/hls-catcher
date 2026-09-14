@@ -1,6 +1,6 @@
 // Runs downloads so they survive the popup/side panel closing. Fetches segments
 // here, then uses ffmpeg.wasm (loaded as a global by offscreen.html) to remux
-// into a real container — .mp4/.m4a instead of raw .ts — and to mux a demuxed
+// into a real container - .mp4/.m4a instead of raw .ts - and to mux a demuxed
 // video+audio pair into one file. Closes itself when idle.
 import { parseSegments } from "./parse.js";
 import { configure, fetchText, fetchSegment } from "./net.js";
@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 async function run({ playlistUrl, audioUrl, name, format, referer }) {
   active++;
-  configure(referer, 778, { relay: true }); // no DNR API here — relay to the SW
+  configure(referer, 778, { relay: true }); // no DNR API here - relay to the SW
   const progress = (done, total, bytes) => report({ type: "progress", playlistUrl, done, total, bytes });
   const status = (text) => report({ type: "status", playlistUrl, text });
   try {
@@ -28,7 +28,7 @@ async function run({ playlistUrl, audioUrl, name, format, referer }) {
     const out = await process(video, audio, format, (p) => status(`processing… ${Math.round(p * 100)}%`));
 
     const blobUrl = URL.createObjectURL(new Blob([out], { type: MIME[format] || "application/octet-stream" }));
-    // chrome.downloads isn't available here — the SW saves and resolves once done.
+    // chrome.downloads isn't available here - the SW saves and resolves once done.
     const res = await chrome.runtime.sendMessage({ type: "save", blobUrl, filename: `${name}.${format}` });
     URL.revokeObjectURL(blobUrl);
     if (res?.error) throw new Error(res.error);
@@ -40,17 +40,17 @@ async function run({ playlistUrl, audioUrl, name, format, referer }) {
   }
 }
 
-// The popup may be closed — a message with no receiver rejects; ignore it.
+// The popup may be closed - a message with no receiver rejects; ignore it.
 const report = (msg) => chrome.runtime.sendMessage(msg).catch(() => {});
 
 const MIME = { mp4: "video/mp4", mkv: "video/x-matroska", m4a: "audio/mp4" };
 
 // Fetch every segment and concatenate into one buffer. Container is "mp4" for
-// fMP4 (has an #EXT-X-MAP init segment) else "ts" — ffmpeg reads both.
+// fMP4 (has an #EXT-X-MAP init segment) else "ts" - ffmpeg reads both.
 async function assembleTrack(playlistUrl, onProgress) {
   const { text, resolvedUrl } = await fetchText(playlistUrl);
   const { segments, initUrl, encrypted } = parseSegments(text, resolvedUrl);
-  if (encrypted) throw new Error("encrypted stream — not supported");
+  if (encrypted) throw new Error("encrypted stream - not supported");
   if (!segments.length) throw new Error("no segments found");
 
   const parts = initUrl ? [new Uint8Array(await fetchSegment({ url: initUrl }))] : [];
@@ -70,7 +70,7 @@ async function assembleTrack(playlistUrl, onProgress) {
   return { data: concat(parts), container: initUrl ? "mp4" : "ts" };
 }
 
-// Remux (and optionally mux audio in) with `-c copy` — container change only,
+// Remux (and optionally mux audio in) with `-c copy` - container change only,
 // no re-encode, so it's fast and lossless. Picking a container incompatible
 // with the stream's codec makes ffmpeg error, which surfaces in the card.
 async function process(video, audio, format, onProgress) {
